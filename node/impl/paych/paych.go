@@ -105,8 +105,7 @@ func (a *PaychAPI) PaychStatus(ctx context.Context, pch address.Address) (*api.P
 	}, nil
 }
 
-func (a *PaychAPI) PaychClose(ctx context.Context, addr address.Address) (cid.Cid, error) {
-	panic("TODO Settle logic")
+func (a *PaychAPI) PaychSettle(ctx context.Context, addr address.Address) (cid.Cid, error) {
 
 	ci, err := a.PaychMgr.GetChannelInfo(addr)
 	if err != nil {
@@ -123,6 +122,41 @@ func (a *PaychAPI) PaychClose(ctx context.Context, addr address.Address) (cid.Ci
 		From:   ci.Control,
 		Value:  types.NewInt(0),
 		Method: builtin.MethodsPaych.Settle,
+		Nonce:  nonce,
+
+		GasLimit: 100_000_000,
+		GasPrice: types.NewInt(0),
+	}
+
+	smsg, err := a.WalletSignMessage(ctx, ci.Control, msg)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	if _, err := a.MpoolPush(ctx, smsg); err != nil {
+		return cid.Undef, err
+	}
+
+	return smsg.Cid(), nil
+}
+
+func (a *PaychAPI) PaychCollect(ctx context.Context, addr address.Address) (cid.Cid, error) {
+
+	ci, err := a.PaychMgr.GetChannelInfo(addr)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	nonce, err := a.MpoolGetNonce(ctx, ci.Control)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	msg := &types.Message{
+		To:     addr,
+		From:   ci.Control,
+		Value:  types.NewInt(0),
+		Method: builtin.MethodsPaych.Collect,
 		Nonce:  nonce,
 
 		GasLimit: 100_000_000,
